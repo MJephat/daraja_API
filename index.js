@@ -1,4 +1,7 @@
 const express = require("express");
+const mongoose = require('mongoose');
+const Payment = require("./model/paymentModel.js");
+
 
 const app = express();
 require("dotenv").config();
@@ -6,16 +9,25 @@ const cors = require("cors");
 const port = process.env.PORT;
 const axios = require("axios")
 // const token = "yj3KOZu0SKc6VEj2PHGAAWJn8mVT";
-
+app.use(express.json());
+app.use(express.urlencoded({extended: true}));
+app.use(cors());
 
 
 app.listen(port, () =>{
     console.log(`Server running on port: ${port}`)
 });
 
-app.use(express.json());
-app.use(express.urlencoded({extended: true}));
-app.use(cors());
+// create connection to the database: step 8
+main().catch(err => console.log(err.message));
+
+async function main() {
+  await mongoose.connect(process.env.MONGO_URL).then(()=>{
+    console.log("Databbase connected successfully");
+  })
+
+  // use `await mongoose.connect('mongodb://user:password@127.0.0.1:27017/test');` if your database has auth enabled
+};
 
 // try route
 app.get("/", (req, res)=>{
@@ -84,8 +96,8 @@ app.post("/stk",  generateToken, async (req,res)=>{
             PartyA:`254${phone}`,    
             PartyB:shortcode,    
             PhoneNumber:`254${phone}`,    
-            CallBackURL: "https://webhook.site/9460e61d-d7da-4834-91ba-cfede9cba097",    
-            // CallBackURL: "https://mydomain.com/pat",
+            // CallBackURL: "https://webhook.site/9460e61d-d7da-4834-91ba-cfede9cba097",    
+            CallBackURL: "https://919c-197-155-74-150.ngrok-free.app/callback",
             AccountReference:`254${phone}`,    
             TransactionDesc:"Test"
          },
@@ -101,4 +113,35 @@ app.post("/stk",  generateToken, async (req,res)=>{
         console.log(err.message)
         res.status(400).json(err.message)
     })
+});
+
+// listening to the callback :step 7
+app.post("/callback", (req, res) =>{
+    const callbackData = req.body;
+    console.log(callbackData.Body);
+    if (!callbackData.Body.stkCallback.CallbackMetadata){
+        console.log(callbackData.Body);
+        return res.json("Process was not completed!");
+    }
+
+    // console.log(callbackData.Body.stkCallback.CallbackMetadata);
+
+//save the transaction to the data base: step 10
+    const phone = callbackData.Body.stkCallback.CallbackMetadata.Item[4].Value;
+    const amount = callbackData.Body.stkCallback.CallbackMetadata.Item[0].Value;
+    const trnx_id = callbackData.Body.stkCallback.CallbackMetadata.Item[1].Value;
+
+    console.log({phone, amount, trnx_id});
+
+    const payment = new Payment();
+
+    payment.number = phone;
+    payment.amount = amount;
+    payment.trnx_id = trnx_id;
+
+    payment.save().then((data)=>{
+        console.log({message: "transaction saved successifully", data});
+    }).catch((err) => {
+        console.log(err.message);
+    });
 });
